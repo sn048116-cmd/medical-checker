@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Medical Receipt Translator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/2.1.5/tesseract.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; background: #f0f4f8; color: #1e293b; min-height: 100vh; padding-bottom: 48px; }
+header { background: #1d4ed8; padding: 18px 20px; text-align: center; }
+header h1 { font-size: 18px; font-weight: 700; color: #fff; }
+header p { font-size: 11px; color: rgba(255,255,255,.7); margin-top: 3px; }
+.dl-bar { background: #1e3a8a; padding: 10px 16px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.dl-bar span { font-size: 12px; color: rgba(255,255,255,.85); }
+.dl-bar button { padding: 7px 18px; background: #fff; color: #1d4ed8; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.wrap { max-width: 480px; margin: 0 auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.card-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: #94a3b8; margin-bottom: 10px; }
+.burden-row { display: flex; gap: 6px; }
+.burden-btn { flex: 1; padding: 10px 2px; border: 2px solid #e2e8f0; border-radius: 10px; background: #f8fafc; font-size: 14px; font-weight: 700; color: #94a3b8; cursor: pointer; text-align: center; }
+.burden-btn span { display: block; font-size: 9px; font-weight: 400; margin-top: 2px; }
+.burden-btn.active { border-color: #1d4ed8; background: #eff6ff; color: #1d4ed8; }
+.burden-btn.active span { color: #1d4ed8; }
+.upload-row { display: flex; gap: 8px; }
+.upload-btn { flex: 1; padding: 16px 6px; border: 2px dashed #e2e8f0; border-radius: 12px; background: #f8fafc; cursor: pointer; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.upload-btn:active { opacity: .6; }
+.upload-btn .ico { font-size: 28px; }
+.upload-btn .lbl { font-size: 12px; font-weight: 600; color: #1d4ed8; }
+.upload-btn .sub { font-size: 10px; color: #94a3b8; }
+input[type=file] { display: none; }
+#previewSection { display: none; margin-top: 10px; }
+#previewImg { width: 100%; border-radius: 10px; border: 1px solid #e2e8f0; display: block; }
+.reselect { display: block; text-align: center; margin-top: 8px; font-size: 12px; color: #1d4ed8; cursor: pointer; text-decoration: underline; }
+#preprocessSection { display: none; margin-top: 10px; }
+#preprocessCanvas { width: 100%; border-radius: 10px; border: 2px solid #fde68a; display: block; }
+.pre-label { font-size: 10px; color: #92400e; text-align: center; margin-top: 4px; }
+.btn { width: 100%; padding: 15px; border-radius: 12px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.btn:active { opacity: .8; }
+.btn-blue { background: #1d4ed8; color: #fff; }
+.btn-green { background: #059669; color: #fff; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+#progressSection { display: none; }
+.prog-track { background: #f1f5f9; border-radius: 99px; height: 8px; overflow: hidden; margin-bottom: 6px; }
+.prog-fill { height: 100%; background: #1d4ed8; border-radius: 99px; transition: width .4s; width: 0%; }
+.prog-lbl { font-size: 12px; color: #64748b; text-align: center; }
+.status { border-radius: 10px; padding: 11px; font-size: 12px; line-height: 1.6; display: none; white-space: pre-wrap; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+.status.err { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+.status.ok { background: #f0fdf4; border-color: #bbf7d0; color: #059669; }
+#resultSection { display: none; }
+#outputCanvas { width: 100%; border-radius: 10px; border: 1px solid #e2e8f0; display: block; }
+#wordListWrap { display: none; }
+.wlist { display: flex; flex-direction: column; gap: 5px; max-height: 260px; overflow-y: auto; }
+.witem { display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 7px 10px; background: #f8fafc; border-radius: 8px; flex-wrap: wrap; }
+.witem .jp { font-weight: 700; color: #1e293b; }
+.witem .arr { color: #94a3b8; }
+.witem .en { color: #1d4ed8; font-weight: 600; }
+.witem .yen { color: #dc2626; font-weight: 700; }
+.witem .sub { color: #94a3b8; margin-left: auto; font-size: 10px; }
+#rawTextWrap { display: none; }
+.raw-toggle { cursor: pointer; }
+.raw-hint { font-size: 10px; color: #1d4ed8; text-decoration: underline; font-weight: 400; text-transform: none; letter-spacing: 0; }
+#rawText { display: none; margin-top: 8px; font-size: 10px; font-family: monospace; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; max-height: 120px; overflow-y: auto; white-space: pre-wrap; color: #475569; line-height: 1.6; }
+.note { font-size: 11px; color: #64748b; line-height: 1.6; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏥 Medical Receipt Translator</h1>
+  <p>日本語の医療領収書を英語＆円換算</p>
+</header>
+<div class="dl-bar">
+  <span>📥 このアプリをiPhoneに保存</span>
+  <button onclick="downloadSelf()">HTMLを保存</button>
+</div>
+<div class="wrap">
+  <div class="card">
+    <div class="card-title">① 窓口負担割合</div>
+    <div class="burden-row">
+      <button class="burden-btn active" data-r="0.3" onclick="selBurden(this)">30%<span>一般（3割）</span></button>
+      <button class="burden-btn" data-r="0.2" onclick="selBurden(this)">20%<span>2割</span></button>
+      <button class="burden-btn" data-r="0.1" onclick="selBurden(this)">10%<span>高齢（1割）</span></button>
+      <button class="burden-btn" data-r="1.0" onclick="selBurden(this)">100%<span>自費</span></button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">② 領収書を選択</div>
+    <div class="upload-row">
+      <div class="upload-btn" onclick="document.getElementById('fc').click()">
+        <div class="ico">📷</div><div class="lbl">カメラ撮影</div><div class="sub">その場で撮る</div>
+      </div>
+      <div class="upload-btn" onclick="document.getElementById('fp').click()">
+        <div class="ico">🖼️</div><div class="lbl">写真から選択</div><div class="sub">フォトライブラリ</div>
+      </div>
+    </div>
+    <input type="file" id="fc" accept="image/*" capture="environment" onchange="handleFile(event)">
+    <input type="file" id="fp" accept="image/*" onchange="handleFile(event)">
+    <div id="previewSection">
+      <img id="previewImg" src="" alt="">
+      <span class="reselect" onclick="document.getElementById('fp').click()">📁 別の写真を選択</span>
+    </div>
+    <div id="preprocessSection">
+      <canvas id="preprocessCanvas"></canvas>
+      <div class="pre-label">⬆ OCR用に前処理した画像</div>
+    </div>
+  </div>
+  <button class="btn btn-blue" id="processBtn" onclick="processImage()" disabled>🔍 OCR解析＆翻訳を実行</button>
+  <div class="card" id="progressSection">
+    <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+    <div class="prog-lbl" id="progLbl">準備中...</div>
+  </div>
+  <div id="statusBox" class="status"></div>
+  <div class="card" id="rawTextWrap">
+    <div class="card-title raw-toggle" onclick="toggleRaw()">OCRが読み取ったテキスト <span class="raw-hint" id="rawHint">▶ 表示</span></div>
+    <div id="rawText"></div>
+  </div>
+  <div class="card" id="wordListWrap">
+    <div class="card-title">検出された項目</div>
+    <div class="wlist" id="wordList"></div>
+  </div>
+  <div class="card" id="resultSection">
+    <div class="card-title">翻訳済み画像</div>
+    <canvas id="outputCanvas"></canvas>
+  </div>
+  <button class="btn btn-green" id="saveBtn" onclick="saveImage()" style="display:none;">💾 翻訳済み画像を保存</button>
+  <p class="note">⚠ 認識できない場合は「OCRが読み取ったテキスト」を確認してください。<br>点数×10円×負担割合で換算。合計金額が読めた場合は自動調整します。</p>
+</div>
+<script>
+const DICT = [
+  ['初診料','Initial Visit Fee'],['初診','Initial Visit'],
+  ['再診料','Follow-up Visit Fee'],['再診','Follow-up Visit'],
+  ['外来診療料','Outpatient Fee'],['診察料','Consultation Fee'],['診察','Consultation'],
+  ['院内処方','In-hospital Rx'],['院外処方','External Prescription'],
+  ['処方せん料','Prescription Fee'],['処方箋料','Prescription Fee'],
+  ['処方料','Prescription Fee'],['処方','Prescription'],
+  ['投薬','Medication'],['調剤技術料','Dispensing Fee'],['調剤','Dispensing'],
+  ['薬剤料','Drug Fee'],['薬剤','Drug'],
+  ['内服薬','Oral Medicine'],['外用薬','Topical Medicine'],
+  ['湿布','Poultice'],['点眼薬','Eye Drops'],['点鼻薬','Nasal Drops'],
+  ['皮下注射','Subcutaneous Inj.'],['筋肉内注射','IM Injection'],
+  ['静脈注射','IV Injection'],['点滴注射','IV Drip'],['注射','Injection'],
+  ['尿検査','Urinalysis'],['血液検査','Blood Test'],['レントゲン','X-ray'],
+  ['ＣＴ検査','CT Scan'],['CT検査','CT Scan'],['ＭＲＩ検査','MRI Scan'],['MRI','MRI'],
+  ['超音波検査','Ultrasound'],['心電図','ECG'],
+  ['検体検査','Specimen Test'],['病理検査','Pathology'],['画像診断','Imaging'],['検査','Examination'],
+  ['創傷処置','Wound Care'],['外科処置','Surgical Procedure'],
+  ['ネブライザー','Nebulizer'],['吸入','Inhalation'],['処置','Treatment'],
+  ['リハビリテーション','Rehabilitation'],['リハビリ','Rehab'],
+  ['運動療法','Exercise Therapy'],['物理療法','Physical Therapy'],
+  ['特定疾患管理料','Chronic Disease Mgmt.'],['特定疾患','Chronic Disease'],
+  ['特定薬剤管理指導料','Medication Guidance'],['薬剤情報提供料','Drug Info Fee'],
+  ['医学管理料','Medical Mgmt Fee'],['管理料','Management Fee'],['指導料','Guidance Fee'],
+  ['入院基本料','Hospitalization (Basic)'],['入院','Hospitalization'],
+  ['食事療養費','Meal Therapy Fee'],['食事','Meal'],
+  ['合計点数','Total Points'],['合計金額','Total Amount'],['合計','Total'],
+  ['小計','Subtotal'],['一部負担金','Patient Copay'],
+  ['窓口負担','Copay'],['負担金','Copay'],
+  ['保険点数','Insurance Points'],['保険','Insurance'],
+  ['自費','Self-Pay'],['消費税','Tax'],
+  ['文書料','Document Fee'],['時間外','After Hours'],
+  ['休日','Holiday'],['夜間','Night'],['往診','House Call'],
+  ['領収書','Receipt'],['医療費','Medical Expense'],
+  ['氏名','Name'],['診療日','Visit Date'],['病院','Hospital'],['クリニック','Clinic'],
+].map(([jp,en]) => ({jp,en}));
+
+let ratio = 0.3, imgSrc = null, processedSrc = null;
+
+function downloadSelf() {
+  const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  const blob = new Blob([html], {type: 'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'medical-receipt-translator.html'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+
+function selBurden(btn) {
+  document.querySelectorAll('.burden-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active'); ratio = parseFloat(btn.dataset.r);
+}
+function setProg(pct, lbl) {
+  document.getElementById('progFill').style.width = pct + '%';
+  document.getElementById('progLbl').textContent = lbl;
+}
+function showSt(msg, type) {
+  const b = document.getElementById('statusBox');
+  b.textContent = msg;
+  b.className = 'status' + (type==='err' ? ' err' : type==='ok' ? ' ok' : '');
+  b.style.display = 'block';
+}
+function toggleRaw() {
+  const el = document.getElementById('rawText');
+  const hint = document.getElementById('rawHint');
+  if (el.style.display === 'none') { el.style.display = 'block'; hint.textContent = '▼ 非表示'; }
+  else { el.style.display = 'none'; hint.textContent = '▶ 表示'; }
+}
+
+function getOrient(buf) {
+  const v = new DataView(buf);
+  if (v.getUint16(0,false) !== 0xFFD8) return 1;
+  let o = 2;
+  while (o < v.byteLength) {
+    if (v.getUint16(o,false) === 0xFFE1) {
+      o += 4;
+      if (v.getUint32(o,false) !== 0x45786966) return 1;
+      const le = v.getUint16(o+6,false) === 0x4949;
+      o += 6 + v.getUint32(o+4,le);
+      const tags = v.getUint16(o,le); o += 2;
+      for (let i = 0; i < tags; i++)
+        if (v.getUint16(o+i*12,le) === 0x0112) return v.getUint16(o+i*12+8,le);
+    } else if ((v.getUint16(o,false) & 0xFF00) !== 0xFF00) break;
+    else o += 2 + v.getUint16(o+2,false);
+  }
+  return 1;
+}
+
+function fixOrient(file) {
+  return new Promise(resolve => {
+    const fr = new FileReader();
+    fr.onload = e => {
+      const orient = getOrient(e.target.result);
+      const url = URL.createObjectURL(new Blob([e.target.result], {type: file.type}));
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas'), ctx = c.getContext('2d');
+        const w = img.naturalWidth, h = img.naturalHeight;
+        if ([5,6,7,8].includes(orient)) { c.width=h; c.height=w; } else { c.width=w; c.height=h; }
+        ctx.save();
+        if (orient===2) ctx.transform(-1,0,0,1,w,0);
+        else if (orient===3) ctx.transform(-1,0,0,-1,w,h);
+        else if (orient===4) ctx.transform(1,0,0,-1,0,h);
+        else if (orient===5) ctx.transform(0,1,1,0,0,0);
+        else if (orient===6) ctx.transform(0,1,-1,0,h,0);
+        else if (orient===7) ctx.transform(0,-1,-1,0,h,w);
+        else if (orient===8) ctx.transform(0,-1,1,0,0,w);
+        ctx.drawImage(img, 0, 0); ctx.restore();
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL('image/jpeg', 0.95));
+      };
+      img.src = url;
+    };
+    fr.readAsArrayBuffer(file);
+  });
+}
+
+function preprocessForOCR(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const W = img.naturalWidth, H = img.naturalHeight;
+      const maxSide = 2000, scale = Math.min(1, maxSide / Math.max(W,H));
+      const nw = Math.round(W*scale), nh = Math.round(H*scale);
+      const c = document.createElement('canvas'); c.width=nw; c.height=nh;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, nw, nh);
+      const id = ctx.getImageData(0,0,nw,nh), d = id.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+        const enh = Math.min(255, Math.max(0, (gray-100)*1.8+100));
+        const bin = enh > 160 ? 255 : 0;
+        d[i]=d[i+1]=d[i+2]=bin; d[i+3]=255;
+      }
+      ctx.putImageData(id, 0, 0);
+      const prev = document.getElementById('preprocessCanvas');
+      prev.width=nw; prev.height=nh;
+      prev.getContext('2d').drawImage(c, 0, 0);
+      document.getElementById('preprocessSection').style.display = 'block';
+      resolve(c.toDataURL('image/png'));
+    };
+    img.src = src;
+  });
+}
+
+async function handleFile(e) {
+  const file = e.target.files[0]; if (!file) return;
+  e.target.value = '';
+  const src = await fixOrient(file);
+  imgSrc = src; processedSrc = null;
+  document.getElementById('previewImg').src = src;
+  document.getElementById('previewSection').style.display = 'block';
+  document.getElementById('preprocessSection').style.display = 'none';
+  document.getElementById('processBtn').disabled = false;
+  ['resultSection','wordListWrap','statusBox','rawTextWrap'].forEach(id => document.getElementById(id).style.display = 'none');
+  document.getElementById('saveBtn').style.display = 'none';
+}
+
+function parseNum(s) {
+  return parseInt((s||'').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/[,，、\s]/g,''), 10);
+}
+
+async function processImage() {
+  if (!imgSrc) return;
+  document.getElementById('processBtn').disabled = true;
+  document.getElementById('progressSection').style.display = 'block';
+  ['wordListWrap','resultSection','statusBox','rawTextWrap'].forEach(id => document.getElementById(id).style.display = 'none');
+  document.getElementById('saveBtn').style.display = 'none';
+  try {
+    setProg(5, '画像を前処理中...');
+    processedSrc = await preprocessForOCR(imgSrc);
+    setProg(15, 'OCRエンジンを起動中...');
+    const result = await Tesseract.recognize(processedSrc, 'jpn', {
+      logger: m => { if (m.status==='recognizing text') setProg(18+Math.round(m.progress*55), 'OCR処理中... '+Math.round(m.progress*100)+'%'); }
+    });
+    setProg(76, 'テキスト解析中...');
+    const lines = result.data.lines || [], fullText = result.data.text || '';
+    document.getElementById('rawText').textContent = fullText || '（テキスト検出なし）';
+    document.getElementById('rawTextWrap').style.display = 'block';
+
+    let totalYen = null;
+    const yenPats = [
+      /(?:合計|一部負担金|窓口負担|負担金)[^\d０-９]*([0-9０-９,，]+)\s*円/,
+      /(?:合計|一部負担金|窓口負担)[^\d０-９]*[¥￥]\s*([0-9０-９,，]+)/,
+    ];
+    for (const pat of yenPats) { const m = fullText.match(pat); if (m) { totalYen = parseNum(m[1]); break; } }
+
+    const TOTAL_KEYS = ['合計点数','合計','小計'];
+    const pointMatches = [];
+    lines.forEach(line => {
+      const lineTxt = line.words.map(w => w.text).join('');
+      const isTotal = TOTAL_KEYS.some(k => lineTxt.includes(k));
+      line.words.forEach(word => {
+        const txt = word.text.replace(/\s/g,'');
+        const m = txt.match(/^([0-9０-９,，]+)[点]$/);
+        if (m) {
+          const pts = parseNum(m[1]);
+          if (!isNaN(pts) && pts>0 && pts<100000 && !isTotal)
+            pointMatches.push({bbox: word.bbox, points: pts, yen: Math.round((pts*10*ratio)/10)*10});
+        }
+      });
+    });
+
+    if (totalYen !== null && pointMatches.length > 0) {
+      const sum = pointMatches.reduce((s,p) => s+p.yen, 0), diff = totalYen - sum;
+      if (diff !== 0) { const maxP = pointMatches.reduce((a,b) => b.points>a.points?b:a); maxP.yen += diff; }
+    }
+
+    const lineTranslations = [], usedLines = new Set();
+    lines.forEach((line, li) => {
+      const lineTxt = line.words.map(w => w.text).join('');
+      let best = null;
+      for (const entry of DICT) if (lineTxt.includes(entry.jp) && (!best || entry.jp.length>best.jp.length)) best = entry;
+      if (best && !usedLines.has(li)) { usedLines.add(li); lineTranslations.push({entry: best, bbox: line.bbox}); }
+    });
+
+    setProg(84, 'Canvas描画中...');
+    const img = new Image();
+    await new Promise(res => { img.onload = res; img.src = imgSrc; });
+    const canvas = document.getElementById('outputCanvas'), ctx = canvas.getContext('2d');
+    const W = img.naturalWidth, H = img.naturalHeight;
+    canvas.width=W; canvas.height=H; ctx.drawImage(img, 0, 0);
+    const maxSide = 2000, invScale = 1/Math.min(1, maxSide/Math.max(W,H));
+    const baseFontSize = Math.max(18, Math.round(W/28));
+
+    lineTranslations.forEach(({entry, bbox: b}) => {
+      const x0=b.x0*invScale, y0=b.y0*invScale, x1=b.x1*invScale, y1=b.y1*invScale, lh=y1-y0;
+      const fs = Math.min(lh*0.75, baseFontSize);
+      ctx.fillStyle='#ffffff'; ctx.fillRect(x0,y0,x1-x0,lh);
+      ctx.fillStyle='#111111'; ctx.font='600 '+fs+'px -apple-system,sans-serif';
+      ctx.textBaseline='middle'; ctx.fillText(entry.en, x0+4, y0+lh*0.5);
+    });
+    pointMatches.forEach(({bbox: b, yen}) => {
+      const x1=b.x1*invScale, y0=b.y0*invScale, lh=(b.y1-b.y0)*invScale;
+      const fs = Math.min(lh*0.7, baseFontSize*0.85);
+      ctx.fillStyle='#cc0000'; ctx.font='700 '+fs+'px -apple-system,sans-serif';
+      ctx.textBaseline='middle'; ctx.fillText('('+yen.toLocaleString()+' Yen)', x1+5, y0+lh*0.5);
+    });
+
+    setProg(94, '検出リスト作成中...');
+    const listEl = document.getElementById('wordList'); listEl.innerHTML = '';
+    lineTranslations.forEach(({entry}) => {
+      const d = document.createElement('div'); d.className='witem';
+      d.innerHTML='<span class="jp">'+entry.jp+'</span><span class="arr">→</span><span class="en">'+entry.en+'</span>';
+      listEl.appendChild(d);
+    });
+    pointMatches.forEach(({points, yen}) => {
+      const d = document.createElement('div'); d.className='witem';
+      d.innerHTML='<span class="jp">'+points+'点</span><span class="arr">→</span><span class="yen">'+yen.toLocaleString()+'円</span><span class="sub">'+Math.round(ratio*100)+'%負担</span>';
+      listEl.appendChild(d);
+    });
+    if (lineTranslations.length||pointMatches.length) document.getElementById('wordListWrap').style.display='block';
+
+    setProg(100, '完了！');
+    document.getElementById('resultSection').style.display='block';
+    document.getElementById('saveBtn').style.display='flex';
+    const total = lineTranslations.length + pointMatches.length;
+    if (total===0) showSt('⚠ 項目が検出できませんでした。「OCRが読み取ったテキスト」を確認してください。', 'err');
+    else {
+      let msg = '✅ '+lineTranslations.length+'件翻訳、'+pointMatches.length+'件の点数を換算しました。';
+      if (totalYen !== null) msg += '\n合計負担額: '+totalYen.toLocaleString()+'円（調整済み）';
+      showSt(msg, 'ok');
+    }
+  } catch(err) {
+    console.error(err); showSt('❌ エラー:\n'+err.message, 'err');
+  }
+  setTimeout(() => { document.getElementById('progressSection').style.display='none'; }, 1200);
+  document.getElementById('processBtn').disabled = false;
+}
+
+function saveImage() {
+  const canvas = document.getElementById('outputCanvas');
+  const a = document.createElement('a');
+  a.download='receipt_translated.png'; a.href=canvas.toDataURL('image/png'); a.click();
+}
+</script>
+</body>
+</html>
